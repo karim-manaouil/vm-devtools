@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 switch=br0
 BZIMAGE="/home/karim/knc-kernel/arch/x86/boot/bzImage"
