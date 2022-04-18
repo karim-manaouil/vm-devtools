@@ -39,6 +39,16 @@ launch_vm(){
 		-device e1000,netdev=mynet1,mac="54:54:00:00:$(($RANDOM%100)):$(($RANDOM%100))"
 }
 
+check_iface_exist(){
+        for iface in "${@}"; do
+                check=$(ip link sh $iface 2>&1)
+                if [ "$?" -eq "0" ]; then
+                        echo "Network $1 already exists!"
+                        exit 1
+                fi
+        done
+}
+
 # ./vmctl network br tap1 tap2 ...
 # ./vmctl vm name tap
 main(){
@@ -48,14 +58,11 @@ main(){
 		exit 1
         fi
 
-        if [ "$1" == "network" ]; then
-                for iface in "${@:2}"; do
-                        check_network=$(ip link sh "$iface" 2>&1)
-                        if [ "$?" -eq "0" ]; then
-                                echo "Network $iface already exists!"
-                                exit 1
-                        fi
-                done
+        if [ "$1" == "vm" ]; then
+                launch_vm "$2" "$3"
+
+        elif [ "$1" == "network" ]; then
+                check_iface_exist "${@:2}"
 
                 create_bridge "$2"
                 echo "Created bridge $2"
