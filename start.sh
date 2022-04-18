@@ -49,6 +49,11 @@ check_iface_exist(){
         return 0
 }
 
+check_is_bridge(){
+        ip link show type bridge | grep -q $1
+        return $?
+}
+
 # ./vmctl network br tap1 tap2 ...
 # ./vmctl vm name tap
 main(){
