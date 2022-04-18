@@ -43,10 +43,10 @@ check_iface_exist(){
         for iface in "${@}"; do
                 check=$(ip link sh $iface 2>&1)
                 if [ "$?" -eq "0" ]; then
-                        echo "Network $1 already exists!"
-                        exit 1
+                        return 1
                 fi
         done
+        return 0
 }
 
 # ./vmctl network br tap1 tap2 ...
@@ -63,6 +63,10 @@ main(){
 
         elif [ "$1" == "network" ]; then
                 check_iface_exist "${@:2}"
+                if [ "$?" -eq 1 ]; then
+                        echo "Interface already exists!"
+                        exit 1
+                fi
 
                 create_bridge "$2"
                 echo "Created bridge $2"
