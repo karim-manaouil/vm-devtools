@@ -26,6 +26,18 @@ allow_vm_ping(){
 	done
 }
 
+# Check router.sh script for more details
+route_br_to_internet(){
+        LOCAL="$1"
+        INTERNET="$2"
+
+        echo "1" > /proc/sys/net/ipv4/ip_forward
+
+        iptables -t nat -A POSTROUTING -o $INTERNET -j MASQUERADE --random
+        iptables -A FORWARD -i $LOCAL -o $INTERNET -j ACCEPT
+        iptables -A FORWARD -i $INTERNET -o $LOCAL -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+}
+
 launch_vm(){
 	qemu-system-x86_64 \
 		-enable-kvm \
@@ -55,6 +67,7 @@ check_is_bridge(){
 }
 
 # ./vmctl network br tap1 tap2 ...
+# ./vmctl route br
 # ./vmctl vm name tap
 main(){
         # Because of tap
@@ -68,7 +81,7 @@ main(){
 
         elif [ "$1" == "network" ]; then
                 check_iface_exist "${@:2}"
-                if [ "$?" -eq 1 ]; then
+                if [ $? -eq 1 ]; then
                         echo "Interface already exists!"
                         exit 1
                 fi
@@ -82,8 +95,22 @@ main(){
                         echo "Created $tap and enslaved to $2"
                 done
                 echo "Done"
-        elif [ "$1" == "vm" ]; then
-                launch_vm "$2" "$3"
+
+        elif [ "$1" == "route" ]; then
+                check_iface_exist "$2"
+                if [ $? -eq 1 ]; then
+                        check_iface_exist "$3"
+                        if [ $? -eq 1 ]; then
+                                check_is_bridge "$2"
+                                if [ $? -eq 0 ]; then
+                                        route_br_to_internet "$2" "$3"
+                                        echo "Traffic from $2 is routed to $3"
+                                        exit 0
+                                fi
+                        fi
+                fi
+                echo "Interface does not exist or $2 is not a bridge!"
+                exit 1
         fi
 }
 
