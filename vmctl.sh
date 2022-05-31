@@ -44,7 +44,7 @@ launch_vm(){
 		-smp 4 \
 		-m 2G \
 		-kernel $BZIMAGE \
-		-append "root=/dev/sda rw console=ttyS0" \
+		-append "root=/dev/sda rw console=ttyS0 earlyprintk apic=verbose" \
 		-hda "$1.img" \
 		-nographic \
 		-netdev tap,id=mynet1,ifname="$2",script=no,downscript=no \
@@ -67,7 +67,7 @@ check_is_bridge(){
 }
 
 # ./vmctl network br tap1 tap2 ...
-# ./vmctl route br
+# ./vmctl route br internet
 # ./vmctl vm name tap
 main(){
         # Because of tap
