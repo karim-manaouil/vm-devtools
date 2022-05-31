@@ -111,6 +111,9 @@ main(){
                 fi
                 echo "Interface does not exist or $2 is not a bridge!"
                 exit 1
+
+        elif [ "$1" == "allow-ping" ]; then
+                allow_vm_ping
         fi
 }
 
