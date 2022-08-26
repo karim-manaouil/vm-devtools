@@ -39,13 +39,19 @@ route_br_to_internet(){
 }
 
 launch_vm(){
+        # addtional disk argument
+        hdb=
+        if [ -n "$3" ]; then
+                hdb="-hdb $3"
+        fi
+
 	qemu-system-x86_64 \
 		-enable-kvm \
 		-smp 4 \
 		-m 2G \
 		-kernel $BZIMAGE \
 		-append "root=/dev/sda rw console=ttyS0 earlyprintk apic=verbose" \
-		-hda "$1.img" \
+		-hda "$1.img" $hdb \
 		-nographic \
 		-netdev tap,id=mynet1,ifname="$2",script=no,downscript=no \
 		-device e1000,netdev=mynet1,mac="54:54:00:00:$(($RANDOM%100)):$(($RANDOM%100))"
@@ -68,7 +74,7 @@ check_is_bridge(){
 
 # ./vmctl network br tap1 tap2 ...
 # ./vmctl route br internet
-# ./vmctl vm name tap
+# ./vmctl vm name tap --disk
 main(){
         # Because of tap
 	if [ "$(id -u)" -ne 0 ]; then
@@ -77,7 +83,11 @@ main(){
         fi
 
         if [ "$1" == "vm" ]; then
-                launch_vm "$2" "$3"
+                add_disk=
+                if [ "$4" == "--disk" ]; then
+                        add_disk="$5"
+                fi
+                launch_vm "$2" "$3" "$add_disk"
 
         elif [ "$1" == "network" ]; then
                 check_iface_exist "${@:2}"
