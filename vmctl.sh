@@ -1,10 +1,14 @@
 #!/bin/bash
 
 switch=br0
-BZIMAGE="/home/karim/knc-kernel/arch/x86/boot/bzImage"
+
+BZIMAGE="/home/karim/linux-6.0-rc3/vmlinux"
+ARM_KERNEL="/home/karim/linux-6.0-rc3/arch/arm64/boot/Image"
+FS="/home/karim/fs"
 
 create_bridge(){
 	ip link add $1 type bridge
+	ip address add 192.168.100.1/24 dev $1
 	ip link set $1 up
 }
 
@@ -45,16 +49,30 @@ launch_vm(){
                 hdb="-hdb $3"
         fi
 
-	qemu-system-x86_64 \
-		-enable-kvm \
-		-smp 4 \
-		-m 2G \
-		-kernel $BZIMAGE \
-		-append "root=/dev/sda rw console=ttyS0 earlyprintk apic=verbose" \
-		-hda "$1.img" $hdb \
-		-nographic \
-		-netdev tap,id=mynet1,ifname="$2",script=no,downscript=no \
-		-device e1000,netdev=mynet1,mac="54:54:00:00:$(($RANDOM%100)):$(($RANDOM%100))"
+	if [ -n "$ARM" ]; then
+		qemu-system-aarch64 \
+			-machine virt \
+			-cpu cortex-a72 \
+			-smp 4 \
+			-m 2G \
+			-kernel $ARM_KERNEL \
+			-append "root=/dev/vda rw console=ttyAMA0 earlyprintk=serial" \
+			-hda "$FS/$1.img" $hdb \
+			-nographic \
+			-netdev tap,id=mynet1,ifname="$2",script=no,downscript=no \
+			-device e1000,netdev=mynet1,mac="54:54:00:00:$(($RANDOM%100)):$(($RANDOM%100))"
+	else
+		qemu-system-x86_64 \
+			-enable-kvm \
+			-smp 4 \
+			-m 2G \
+			-kernel $BZIMAGE \
+			-append "root=/dev/sda rw console=ttyS0 earlyprintk apic=verbose" \
+			-hda "$FS/$1.img" $hdb \
+			-nographic \
+			-netdev tap,id=mynet1,ifname="$2",script=no,downscript=no \
+			-device e1000,netdev=mynet1,mac="54:54:00:00:$(($RANDOM%100)):$(($RANDOM%100))"
+	fi
 }
 
 check_iface_exist(){
