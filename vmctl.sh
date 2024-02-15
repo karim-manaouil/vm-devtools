@@ -117,6 +117,40 @@ check_is_bridge(){
         return $?
 }
 
+do_cpupin(){
+	nr_nodes=$1
+	tids=()
+	i=0
+
+	# Read thread ids of qemu vCPUs via qemu telnet console.
+	output=$(echo "info cpus" |\
+		nc -q 1 localhost 17555 |\
+		tr -d '\r' | cut -d= -f2 |\
+		grep -a "^[0-9]")
+
+	while IFS= read -r line; do
+		tids+=("$line")
+	done <<< "$output"
+
+	div=$((${#tids[@]} / $nr_nodes))
+
+	for ((i = 0; i < ${#tids[@]}; i++)); do
+		if [ "$(($i % $div))" -eq 0 ]; then
+			shift
+			cpu_i=0
+			cpu_list=()
+			output=$(numactl -H |\
+				grep "node $1 cpus" |\
+				cut -d":" -f2)
+			for cpu in ${output[@]}; do
+				cpu_list+=("$cpu")
+			done
+		fi
+		taskset -p -c "${cpu_list[$cpu_i]}" "${tids[i]}"
+		cpu_i=$(($cpu_i + 1))
+	done
+}
+
 # ./vmctl network br tap1 tap2 ...
 # ./vmctl route br internet
 # [GDB=1] ./vmctl vm name tap --disk
@@ -170,6 +204,9 @@ main(){
                 allow_vm_ping
         elif [ "$1" == "default" ]; then
                 ./vmctl.sh start "images/vm" tap1
+        elif [ "$1" == "cpupin" ]; then
+		shift
+		do_cpupin $@
 	else
 		echo "Nothing to do!"
 	fi
