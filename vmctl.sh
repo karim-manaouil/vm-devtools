@@ -1,14 +1,13 @@
 #!/bin/bash
 
+kernel="src"
+kernel_path="/home/karim/linux/$kernel"
 switch=br0
-
-BZIMAGE="/home/karim/linux-6.0-rc3/vmlinux"
-ARM_KERNEL="/home/karim/linux-6.0-rc3/arch/arm64/boot/Image"
-FS="/home/karim/fs"
+BZIMAGE="$kernel_path/arch/x86/boot/bzImage"
 
 create_bridge(){
 	ip link add $1 type bridge
-	ip address add 192.168.100.1/24 dev $1
+        ip address add 192.168.100.1/24 dev $1
 	ip link set $1 up
 }
 
@@ -31,6 +30,8 @@ allow_vm_ping(){
 }
 
 # Check router.sh script for more details
+# TODO: Debian 11+ switched to nftables,
+#	convert this code to work with it.
 route_br_to_internet(){
         LOCAL="$1"
         INTERNET="$2"
@@ -49,30 +50,56 @@ launch_vm(){
                 hdb="-hdb $3"
         fi
 
-	if [ -n "$ARM" ]; then
-		qemu-system-aarch64 \
-			-machine virt \
-			-cpu cortex-a72 \
-			-smp 4 \
-			-m 2G \
-			-kernel $ARM_KERNEL \
-			-append "root=/dev/vda rw console=ttyAMA0 earlyprintk=serial" \
-			-hda "$FS/$1.img" $hdb \
-			-nographic \
-			-netdev tap,id=mynet1,ifname="$2",script=no,downscript=no \
-			-device e1000,netdev=mynet1,mac="54:54:00:00:$(($RANDOM%100)):$(($RANDOM%100))"
-	else
-		qemu-system-x86_64 \
-			-enable-kvm \
-			-smp 4 \
-			-m 2G \
-			-kernel $BZIMAGE \
-			-append "root=/dev/sda rw console=ttyS0 earlyprintk apic=verbose" \
-			-hda "$FS/$1.img" $hdb \
-			-nographic \
-			-netdev tap,id=mynet1,ifname="$2",script=no,downscript=no \
-			-device e1000,netdev=mynet1,mac="54:54:00:00:$(($RANDOM%100)):$(($RANDOM%100))"
+	gdb=""
+	if [[ -v GDB ]]; then
+		gdb="-s -S"
 	fi
+
+	kcmdline=(
+		"root=/dev/sda"
+		"rw console=ttyS0"
+		"earlyprintk"
+		#"apic=verbose"
+		"systemd.unified_cgroup_hierarchy=1"
+		"nokaslr"
+		#"memmap=1G\$0x80000000"
+		#"memory_hotplug.memmap_on_memory=1"
+		#"hugepagesz=2M hugepages=10"
+		#hugepagesz=1G hugepages=1"
+	)
+
+	# For this memory config
+	# on x86-64, Qemu generates
+	# last node at 0x240000000.
+	# That's the value passed
+	# to memmap kernel boot arg
+	# above.
+
+	#-numa node,nodeid=2,memdev=cxl \
+	#-object memory-backend-ram,size=2G,id=cxl \
+	qemu-system-x86_64 \
+		-enable-kvm \
+		-cpu host \
+		-smp 32,sockets=2 \
+		-m 32G \
+		-object memory-backend-ram,size=16G,policy=bind,host-nodes=2,id=m0 \
+		-object memory-backend-ram,size=16G,policy=bind,host-nodes=3,id=m1 \
+		-numa node,nodeid=0,memdev=m0 \
+		-numa node,nodeid=1,memdev=m1 \
+		-numa cpu,node-id=0,socket-id=0 \
+		-numa cpu,node-id=1,socket-id=1 \
+		-numa dist,src=0,dst=1,val=11 \
+		-kernel $BZIMAGE \
+		-append "${kcmdline[*]}" \
+		-hda "$1.img" $hdb \
+		-virtfs local,path=$kernel_path,security_model=none,mount_tag=kernel \
+		-netdev tap,id=mynet1,ifname="$2",script=no,downscript=no \
+		-device e1000,netdev=mynet1,mac="54:54:00:00:13:14" \
+		-monitor telnet:localhost:17555,server,nowait \
+		-display none \
+		-serial pty \
+		-daemonize \
+		$gdb
 }
 
 check_iface_exist(){
@@ -92,7 +119,7 @@ check_is_bridge(){
 
 # ./vmctl network br tap1 tap2 ...
 # ./vmctl route br internet
-# ./vmctl vm name tap --disk
+# [GDB=1] ./vmctl vm name tap --disk
 main(){
         # Because of tap
 	if [ "$(id -u)" -ne 0 ]; then
@@ -100,7 +127,7 @@ main(){
 		exit 1
         fi
 
-        if [ "$1" == "vm" ]; then
+        if [ "$1" == "start" ]; then
                 add_disk=
                 if [ "$4" == "--disk" ]; then
                         add_disk="$5"
@@ -139,10 +166,13 @@ main(){
                 fi
                 echo "Interface does not exist or $2 is not a bridge!"
                 exit 1
-
         elif [ "$1" == "allow-ping" ]; then
                 allow_vm_ping
-        fi
+        elif [ "$1" == "default" ]; then
+                ./vmctl.sh start "images/vm" tap1
+	else
+		echo "Nothing to do!"
+	fi
 }
 
 main $@
