@@ -91,7 +91,7 @@ launch_vm(){
 		-numa dist,src=0,dst=1,val=11 \
 		-kernel $BZIMAGE \
 		-append "${kcmdline[*]}" \
-		-hda "$1.img" $hdb \
+		-drive format=raw,file="$1.img" \
 		-virtfs local,path=$kernel_path,security_model=none,mount_tag=kernel \
 		-netdev tap,id=mynet1,ifname="$2",script=no,downscript=no \
 		-device e1000,netdev=mynet1,mac="54:54:00:00:13:14" \
